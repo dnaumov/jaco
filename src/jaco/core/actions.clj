@@ -22,9 +22,9 @@
                    [(-> % first name symbol) `(-> ~params-sym ~(first %) :val)])
                 args)))
 
-;; *error-handler* can not be rebinded when setted in this way
+;; *error-handler* can not be rebound when set in this way
 (defn- wrap-error-handler [{:keys [error-handler]} body]
-  (if (not= error-handler :default) 
+  (if (not= error-handler :default)
     `(binding [*error-handler* ~error-handler]
        ~body)
     body))
@@ -63,8 +63,12 @@
              (wrap-error-handler opts)))))
 
 (defmacro defaction
-  {:arglists '([name opts? args & body])} [name opts-or-args & more]
-  `(def ~name (action ~opts-or-args ~@more)))
+  {:arglists '([name doc-string? opts? args & body])} [name doc-or-opts-or-args & more]
+  (let [[doc opts-or-args more] (if (string? doc-or-opts-or-args)
+                                  [doc-or-opts-or-args (first more) (rest more)]
+                                  [nil doc-or-opts-or-args more])
+        name (with-meta name (merge (meta name) {:doc doc}))]
+    `(def ~name (action ~opts-or-args ~@more))))
 
 
 ;; returns a fn: Param -> Param

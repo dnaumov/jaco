@@ -65,9 +65,11 @@
      :body) {}) => :body)
 
 (fact "(action ...) returns an anonymous fn, but normally you would have a named one"
-  (defaction foo [[:x parse-int check-positive] [:y]]
+  (defaction foo "doc-string"
+    [[:x parse-int check-positive] [:y]]
     (str x y))
-  (foo {:x "4" :y "2"}) => "42")
+  (foo {:x "4" :y "2"}) => "42"
+  (-> foo var meta :doc) => "doc-string")
 
 
 (comment ;; so, action's args can be reused

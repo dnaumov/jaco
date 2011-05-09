@@ -62,8 +62,12 @@
     (make-route method path opts fns)))
 
 
-(defn set-context-path! [path & routes]
-  (doseq [r routes]
-    (alter-meta! r assoc ::context-path path)))
+(defn set-context-path! [route-var path]
+  (alter-meta! route-var assoc ::context-path path))
 
-(defmacro context [& _]) ;; TODO: write -- 09.05.11
+(defmacro context [path & routes]
+  `(do
+     ~@(for [[sym maybe-var] routes]
+         (when (= 'route sym)
+           `(set-context-path! ~maybe-var ~path)))
+     (compojure.core/context ~path [] ~@routes)))

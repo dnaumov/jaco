@@ -70,7 +70,7 @@
   (foo "a" nil :foo "bar")  => "/a/?foo=bar"
   (foo "a" "b" :c) => (throws IllegalArgumentException)
 
-  (set-context-path! "/foo" #'foo)
+  (set-context-path! #'foo "/foo")
   (foo "a" "b") => "/foo/a/b")
 
 
@@ -89,6 +89,7 @@
 
 (facts "about set-context-path!"
   (letfn [(ctxt [v] (:jaco.core.routes/context-path (meta v)))]
-    (set-context-path! "/ctxt" #'simple #'params)
+    (set-context-path! #'simple "/ctxt")
+    (set-context-path! #'params "/foo")
     (ctxt #'simple) => "/ctxt"
-    (ctxt #'params) => "/ctxt"))
+    (ctxt #'params) => "/foo"))

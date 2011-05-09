@@ -4,8 +4,6 @@
         [clojure.string    :only [join]]
         [clout.core        :only [route-compile]]))
 
-(defrecord Route [path context-path opts])
-
 (defn encode [s]
   (java.net.URLEncoder/encode (str s)))
 
@@ -24,8 +22,9 @@
                               (map (comp encode name key) get-params#)
                               (map (comp encode val) get-params#)))))))
 
-(defn make-url-fn [path opts]
+(defn make-url-fn [name path opts]
   (let [path (.replace path "*" ":*")
+        make-path `(str (::context-path (meta (var ~name))) ~path)
         args (url-args path)
         more (gensym "more")]
     `(fn [~@args & ~more]
@@ -35,17 +34,15 @@
                 (throw (IllegalArgumentException. (str "Param not match the regex: " regex#))))))
        (when-not (even? (count ~more))
          (throw (IllegalArgumentException. "An even number of additional args required")))
-       ~(url-constructor path args `(apply array-map ~more)))))
+       ~(url-constructor make-path args `(apply array-map ~more)))))
 
 (defmacro defroute
   {:arglists '([name path opts?])}
-  ([name path]
-     `(defroute ~name ~path nil))
-  ([name path opts]
-     (let [arglists (list 'quote (list (vec (concat (url-args path) '(& get-params)))))
-           name (with-meta name {:arglists arglists})]
-       `(def ~name ~(with-meta (make-url-fn path opts)
-                      {:path path :opts opts})))))
+  [name path & [opts]]
+  (let [arglists (list 'quote (list (vec (concat (url-args path) '(& get-params)))))
+        name (with-meta name {:arglists arglists
+                              ::path path ::opts opts})]
+    `(def ~name ~(make-url-fn name path opts))))
 
 
 (defmacro make-route [method path opts fns]
@@ -57,13 +54,16 @@
 
 
 (defn route
-  {:arglists '([route method? f & fs])} [& more]
-  (let [{:keys [path opts]} (meta (first more))
+  {:arglists '([route-var method? f & fs])} [& more]
+  (let [{path ::path, opts ::opts} (meta (first more))
         [method fns] (if (keyword? (second more))
                        [(second more) (drop 2 more)]
                        [:get (rest more)])]
     (make-route method path opts fns)))
 
 
-(defn set-context-path! [& _] ;; TODO: write
-  )
+(defn set-context-path! [path & routes]
+  (doseq [r routes]
+    (alter-meta! r assoc ::context-path path)))
+
+(defmacro context [& _]) ;; TODO: write -- 09.05.11

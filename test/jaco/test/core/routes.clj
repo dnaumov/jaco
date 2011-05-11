@@ -74,17 +74,20 @@
   (foo "a" "b") => "/foo/a/b")
 
 
+(def ^{:macro true} make-route @#'jaco.core.routes/make-route)
 (facts "about make-route"
-  (let [r (make-route :get "/foo" nil [(constantly "foo!")])]
+  (let [;make-route #'jaco.core.routes/make-route
+        r (make-route :get "/foo" nil [(constantly "foo!")])
+        rr (make-route :get "/foo/:id" {:id #"[0-9]+"} [(constantly "foo!")])]
+
     (request r "/foo") => "foo!"
-    (request r "/fu")  => nil)
+    (request r "/fu")  => nil
 
-  (let [r (make-route :get "/foo/:id" {:id #"[0-9]+"} [(constantly "foo!")])]
-    (request r "/foo/brr") => nil
-    (request r "/foo/42") => "foo!")
+    (request rr "/foo/brr") => nil
+    (request rr "/foo/42") => "foo!"
 
-  (request (make-route :get "/foo/:bar" nil [:bar #(.toUpperCase %)]) "/foo/baar")
-  => "BAAR")
+    (request (make-route :get "/foo/:bar" nil [:bar #(.toUpperCase %)]) "/foo/baar")
+    => "BAAR"))
 
 
 (facts "about set-context-path!"

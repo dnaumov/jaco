@@ -6,7 +6,7 @@
   (:require (jaco.crud [actions   :as actions]
                        [templates :as templates])))
 
-(defroutes crud-routes
+(defroutes crud-routes {:private true}
   (route #'index    actions/index)
   (route #'overview actions/overview)
   (route #'create   actions/create-page)
@@ -23,3 +23,4 @@
       (handler (assoc req :uri (.replaceAll (:uri req) "\\." ":"))))))
 
 (def main-routes (middleware crud-routes))
+(intern *ns* 'defcrud #'actions/defcrud)

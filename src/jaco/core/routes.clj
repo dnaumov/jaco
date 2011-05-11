@@ -7,12 +7,12 @@
 (defn encode [s]
   (java.net.URLEncoder/encode (str s)))
 
-(defn url-args [path]
+(defn- url-args [path]
   (let [path-seq (rest (.split path "/|\\." -1))
         params (filter #(.startsWith % ":") path-seq)]
     (map #(symbol (apply str (rest %))) params)))
 
-(defn url-constructor [path args get-params]
+(defn- url-constructor [path args get-params]
   `(str
     (-> ~path
         ~@(for [a args]
@@ -22,7 +22,7 @@
                               (map (comp encode name key) get-params#)
                               (map (comp encode val) get-params#)))))))
 
-(defn make-url-fn [name path opts]
+(defn- make-url-fn [name path opts]
   (let [path (.replace path "*" ":*")
         make-path `(str (::context-path (meta (var ~name))) ~path)
         args (url-args path)
@@ -45,7 +45,8 @@
     `(def ~name ~(make-url-fn name path opts))))
 
 
-(defmacro make-route [method path opts fns]
+(defmacro ^{:private true} make-route
+  [method path opts fns]
   (let [req-sym (gensym "request")
         path `(route-compile ~path (or ~opts {}))
         body `(binding [*request* ~req-sym]

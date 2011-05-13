@@ -71,6 +71,9 @@
   (foo {:x "4" :y "2"}) => "42"
   (-> foo var meta :doc) => "doc-string")
 
+(fact "you can also use keywords in args, that's the same as one-elem vector"
+  ((action [:x :y :z] [z y x]) {:x 1 :y 2 :z 3}) => [3 2 1])
+
 
 (comment ;; so, action's args can be reused
   (def entity [:id parse-int get-from-db ensure-non-nil])

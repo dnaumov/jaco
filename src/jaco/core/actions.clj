@@ -54,6 +54,7 @@
                            [opts-or-args (first more) (rest more)]
                            [{} opts-or-args more])
         opts (merge {:error-handler :default} opts)
+        args (vec (map #(if (keyword? %) [%] %) args))
         params (gensym "params")]
     `(fn [~params]
        ~(->> body

@@ -1,7 +1,6 @@
 (ns jaco.test.core.routes
   (:use midje.sweet
-        [jaco.core.actions :only [*request*]]
-        [compojure.core    :only [defroutes]])
+        [jaco.core.actions :only [*request* *error-handler*]])
   (:use jaco.core.routes :reload-all))
 
 (defn request [handler uri & options]
@@ -30,6 +29,12 @@
     (route #'params (constantly "params")))
   (request compound "/foo/bar") => "simple"
   (request compound "/qwe/asd") => "params")
+
+(fact "it's possible to specify error handler for the routes"
+  (defroutes safe {:error-handler (constantly "error")}
+    (route #'params #(if (= "good" (:first %)) "ok" (*error-handler*))))
+  (request safe "/good/second") => "ok"
+  (request safe "/bad/second") => "error")
 
 (fact "last arg is a fn that will be applied to params map (usually it's an action)"
   (request (route #'params (fn [{:keys [first second]}] (str first second)))

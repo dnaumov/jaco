@@ -1,8 +1,9 @@
 (ns jaco.core.routes
-  (:require compojure.core)
-  (:use [jaco.core.actions :only [*request*]]
-        [clojure.string    :only [join]]
-        [clout.core        :only [route-compile]]))
+  (:require [compojure.core  :as compojure])
+  (:use [clojure.contrib.def :only [name-with-attributes]]
+        [jaco.core.actions   :only [*request* *error-handler*]]
+        [clojure.string      :only [join]]
+        [clout.core          :only [route-compile]]))
 
 (defn encode [s]
   (java.net.URLEncoder/encode (str s)))
@@ -51,7 +52,7 @@
         path `(route-compile ~path (or ~opts {}))
         body `(binding [*request* ~req-sym]
                 ((apply comp (reverse ~fns)) (:params ~req-sym)))]
-    (#'compojure.core/compile-route method path req-sym [body])))
+    (#'compojure/compile-route method path req-sym [body])))
 
 
 (defn route
@@ -71,4 +72,13 @@
      ~@(for [[sym maybe-var] routes]
          (when (= 'route sym)
            `(set-context-path! ~maybe-var ~path)))
-     (compojure.core/context ~path [] ~@routes)))
+     (compojure/context ~path [] ~@routes)))
+
+
+(defmacro defroutes [name & more]
+  (let [[name routes] (name-with-attributes name more)
+        err-handler (-> name meta :error-handler)]
+    (if err-handler
+      `(def ~name (fn [req#] (binding [*error-handler* ~err-handler]
+                               ((compojure/routes ~@routes) req#))))
+      `(def ~name (compojure/routes ~@routes)))))

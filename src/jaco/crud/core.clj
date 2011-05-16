@@ -1,8 +1,6 @@
 (ns jaco.crud.core
   (:use jaco.crud.routes
-        [compojure.core     :only [defroutes]]
-        (jaco.core [routes  :only [route]]
-                   [actions :only [*error-handler*]]))
+        [jaco.core.routes :only [defroutes route]])
   (:require (jaco.crud [actions   :as actions]
                        [templates :as templates])))
 

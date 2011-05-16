@@ -60,10 +60,12 @@
   (regex "42") => "/42"
   (regex "foo") => (throws IllegalArgumentException))
 
+
 (fact "you should use context macro for the correct generation of relative urls"
+  (defroutes module-routes
+    (route #'simple identity))
   (defroutes your-app
-    (context "/module-name"
-             (route #'simple identity)))
+    (context "/module-name" module-routes))
   (simple) => "/module-name/foo/bar")
 
 

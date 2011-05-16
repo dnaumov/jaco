@@ -54,7 +54,6 @@
                 ((apply comp (reverse ~fns)) (:params ~req-sym)))]
     (#'compojure/compile-route method path req-sym [body])))
 
-
 (defn route
   {:arglists '([route-var method? f & fs])} [& more]
   (let [{path ::path, opts ::opts} (meta (first more))
@@ -67,17 +66,19 @@
 (defn set-context-path! [route-var path]
   (alter-meta! route-var assoc ::context-path path))
 
-(defmacro context [path & routes]
-  `(do
-     ~@(for [[sym maybe-var] routes]
-         (when (= 'route sym)
-           `(set-context-path! ~maybe-var ~path)))
-     (compojure/context ~path [] ~@routes)))
+(defmacro context [path & handlers]
+  `(do ~@(map (fn [h] `(doseq [r# (-> ~h var meta ::routes)]
+                         (set-context-path! r# ~path)))
+              handlers)
+       (compojure/context ~path [] ~@handlers)))
 
 
 (defmacro defroutes [name & more]
   (let [[name routes] (name-with-attributes name more)
-        err-handler (-> name meta :error-handler)]
+        err-handler (-> name meta :error-handler)
+        name (with-meta name (conj (dissoc (meta name) :error-handler)
+                                   {::routes (vec (map second routes))}))]
+
     (if err-handler
       `(def ~name (fn [req#] (binding [*error-handler* ~err-handler]
                                ((compojure/routes ~@routes) req#))))

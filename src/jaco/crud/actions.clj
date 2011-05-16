@@ -1,4 +1,5 @@
 (ns jaco.crud.actions
+  (:refer-clojure :exclude [type])
   (:use [jaco.core.actions :only [*request* *errors* defaction action converter]])
   (:require (jaco.crud [datasource :as ds]
                        [templates  :as tpl]
@@ -6,7 +7,7 @@
 
 (def *crud-map* {})
 
-(defn- crud-props [type]
+(defn crud-props [type]
   (or (get *crud-map* type)
       (throw (IllegalArgumentException. (str "There is no CRUD for the type " type)))))
 
@@ -22,7 +23,7 @@
 ;; Actions
 ;;================================
 
-(def type [:type (converter #(Class/forName (.replaceAll % ":" "."))
+(def type [:* (converter #(Class/forName (.replaceAll % ":" "."))
                             (constantly "There is no class with the given name."))])
 
 (def id [:id (converter #(and (seq %) (Integer/parseInt %)) 
@@ -77,7 +78,7 @@
    :factory (fn [_]
               (throw (UnsupportedOperationException. "Factory fn is not provided")))
    :create (action [type]
-            (ds/save! ((:factory (get *crud-map* type)) (:params *request*)))
+            (ds/save! ((:factory (crud-props type)) (:params *request*)))
             (tpl/completed))
    :update (action [type id]
              (when-let [entity (ds/retrieve type id)]

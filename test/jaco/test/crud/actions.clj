@@ -8,12 +8,11 @@
   (:import jaco.crud.actions.Field))
 
 (facts "about crud-props"
-  (let [crud-props #'jaco.crud.actions/crud-props]
-    (crud-props "something wrong")
-    => (throws IllegalArgumentException "There is no CRUD for the type something wrong")
+  (crud-props "something wrong")
+  => (throws IllegalArgumentException "There is no CRUD for the type something wrong")
 
-    (binding [*crud-map* {:foo :bar}]
-      (crud-props :foo)) => :bar))
+  (binding [*crud-map* {:foo :bar}]
+    (crud-props :foo)) => :bar)
 
 
 ;;================================
@@ -35,17 +34,18 @@
     (factory anything)  => (throws UnsupportedOperationException "Factory fn is not provided")
 
     (binding [*request* {:params {:a 1 :b 2 :c 3}}]
-      (create {:type mock-name}) => (tpl/completed)
+      (create {:* mock-name}) => (tpl/completed)
       (provided
+        (crud-props jaco.test.crud.actions.Mock) => {:factory identity}
         (ds/save! {:a 1, :b 2, :c 3}) => :ok))
 
     (binding [*request* {:params {:a 3 :b 2}}]
-      (update {:type mock-name :id 1}) => (tpl/completed)
+      (update {:* mock-name :id 1}) => (tpl/completed)
       (provided
         (ds/retrieve Mock 1) => {:a 1 :b 2 :c 3}
         (ds/save! {:a 3, :b 2, :c 3}) => :ok))
 
-    (delete {:type mock-name :id 1}) => (tpl/completed)
+    (delete {:* mock-name :id 1}) => (tpl/completed)
     (provided
       (ds/retrieve Mock 1) => :entity
       (ds/delete! :entity) => :ok)))
@@ -103,8 +103,9 @@
   => {:a "1" :b "*2*" :c "3"})
 
 
+;.;. If this isn't nice, I don't know what is. -- Vonnegut
 (facts "about create-page"
-  (create-page {:type mock-name})
+  (create-page {:* mock-name})
   => (tpl/view nil [{:title "AAA"
                      :comment "Well, it's the A!"
                      :view (my-view "a" (my-default))}
@@ -117,7 +118,7 @@
 
 
 (facts "about update-page"
-  (update-page {:type mock-name, :id "1"})
+  (update-page {:* mock-name, :id "1"})
   => (tpl/view 1 [{:title "AAA"
                    :comment "Well, it's the A!"
                    :view (my-view "a" "a val")}
@@ -132,11 +133,11 @@
 
 
 (facts "about overview"
-  (overview {:type mock-name}) => (tpl/overview [] (routes/create mock-name))
+  (overview {:* mock-name}) => (tpl/overview [] (routes/create mock-name))
   (provided
     (ds/retrieve-all Mock) => [])
 
-  (overview {:type mock-name})
+  (overview {:* mock-name})
   => (tpl/overview [[(routes/update mock-name 1) (routes/delete mock-name 1) {:a 1}]]
                    (routes/create mock-name))
   (provided

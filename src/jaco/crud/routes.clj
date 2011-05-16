@@ -1,8 +1,8 @@
 (ns jaco.crud.routes
   (:use jaco.core.routes))
 
-(defroute create   "/:type/create")
-(defroute update   "/:type/update/:id")
-(defroute delete   "/:type/delete/:id")
-(defroute overview "/:type/overview")
+(defroute create   "/*/create")
+(defroute update   "/*/update/:id")
+(defroute delete   "/*/delete/:id")
+(defroute overview "/*/overview")
 (defroute index    "/index")

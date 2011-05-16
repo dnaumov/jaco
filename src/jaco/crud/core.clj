@@ -6,7 +6,7 @@
   (:require (jaco.crud [actions   :as actions]
                        [templates :as templates])))
 
-(defroutes crud-routes {:private true}
+(defroutes main-routes
   (route #'index    actions/index)
   (route #'overview actions/overview)
   (route #'create   actions/create-page)
@@ -16,11 +16,4 @@
   (route #'update :post actions/update)
   (route #'delete :get  actions/delete))
 
-;; Compojure uses dot as a separator, so we need something like this
-(defn- middleware [handler]
-  (fn [req]
-    (binding [*error-handler* #(templates/error (flatten (map :errors %)))]
-      (handler (assoc req :uri (.replaceAll (:uri req) "\\." ":"))))))
-
-(def main-routes (middleware crud-routes))
-(intern *ns* 'defcrud #'actions/defcrud)
+(def ^{:macro true} defcrud @#'actions/defcrud)

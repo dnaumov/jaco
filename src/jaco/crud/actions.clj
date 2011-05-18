@@ -11,23 +11,35 @@
   (or (get *crud-map* type)
       (throw (IllegalArgumentException. (str "There is no CRUD for the type " type)))))
 
-;; handlers, defcrud creates their impl
-(defn- dispatch [type params] type)
+(def type [:* (converter #(Class/forName %)
+                         (constantly "There is no class with the given name."))])
 
-(defmulti create dispatch)
-(defmulti update dispatch)
-(defmulti delete dispatch)
-
-
-;;================================
-;; Actions
-;;================================
-
-(def type [:* (converter #(Class/forName (.replaceAll % ":" "."))
-                            (constantly "There is no class with the given name."))])
-
-(def id [:id (converter #(and (seq %) (Integer/parseInt %)) 
+(def id [:id (converter #(and (seq %) (Integer/parseInt %))
                         (constantly "Wrong entity ID."))])
+
+
+(defaction create [type]
+  (let [{:keys [create factory]} (crud-props type)
+        params (:params *request*)]
+    (if create
+      (create params)
+      (do (ds/save! (factory params))
+          (tpl/completed)))))
+
+(defaction update [type id]
+  (if-let [update (:update (crud-props type))]
+    (update (:params *request*))
+    (when-let [entity (ds/retrieve type id)]
+      (ds/save! (merge entity
+                       (select-keys (:params *request*) (keys entity))))
+      (tpl/completed))))
+
+(defaction delete [type id]
+  (if-let [delete (:delete (crud-props type))]
+    (delete (:params *request*))
+    (do (ds/delete! (ds/retrieve type id))
+        (tpl/completed))))
+
 
 (defn- apply-to-string [entity]
   (into {}
@@ -76,25 +88,17 @@
   {:title (str entity-type)
    :overview (map first fields)
    :factory (fn [_]
-              (throw (UnsupportedOperationException. "Factory fn is not provided")))
-   :create (action [type]
-            (ds/save! ((:factory (crud-props type)) (:params *request*)))
-            (tpl/completed))
-   :update (action [type id]
-             (when-let [entity (ds/retrieve type id)]
-               (ds/save! (merge entity
-                                (select-keys (:params *request*) (keys entity))))
-               (tpl/completed)))
-   :delete (action [type id]
-             (ds/delete! (ds/retrieve type id))
-             (tpl/completed))})
+              (throw (UnsupportedOperationException. "Factory fn is not provided")))})
 
 (defn alter-crud-map
-  [type {:keys [title overview factory]} fields]
+  [type {:keys [title overview factory create update delete]} fields]
   `(alter-var-root (var *crud-map*) assoc ~type
                    {:title ~title
                     :overview ~(vec (map keyword overview))
                     :factory ~factory
+                    :create ~create
+                    :update ~update
+                    :delete ~delete
                     :fields ~(into {} (map (fn [[name title & {:keys [comment view default to-string]}]]
                                              [(keyword name)
                                               (Field. title comment
@@ -110,8 +114,4 @@
                         [(first opts+fields) (rest opts+fields)]
                         [nil opts+fields])
         opts (merge (provide-default-opts type fields) opts)]
-    `(do
-       ~(alter-crud-map type opts fields)
-       (defmethod create ~type [type# params#] (~(:create opts) params#))
-       (defmethod update ~type [type# params#] (~(:update opts) params#))
-       (defmethod delete ~type [type# params#] (~(:delete opts) params#)))))
+    (alter-crud-map type opts fields)))

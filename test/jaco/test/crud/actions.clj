@@ -31,24 +31,26 @@
         (provide-default-opts 'Mock '[(foo :something :here) (bar :and :more) (baz)])]
 
     opts => (contains {:title "Mock" :overview '(foo bar baz)})
-    (factory anything)  => (throws UnsupportedOperationException "Factory fn is not provided")
+    (factory anything)  => (throws UnsupportedOperationException "Factory fn is not provided")))
 
-    (binding [*request* {:params {:a 1 :b 2 :c 3}}]
-      (create {:* mock-name}) => (tpl/completed)
-      (provided
-        (crud-props jaco.test.crud.actions.Mock) => {:factory identity}
-        (ds/save! {:a 1, :b 2, :c 3}) => :ok))
-
-    (binding [*request* {:params {:a 3 :b 2}}]
-      (update {:* mock-name :id 1}) => (tpl/completed)
-      (provided
-        (ds/retrieve Mock 1) => {:a 1 :b 2 :c 3}
-        (ds/save! {:a 3, :b 2, :c 3}) => :ok))
-
-    (delete {:* mock-name :id 1}) => (tpl/completed)
+;; FIXME:  -- 18.05.11
+(facts "about default actions"
+  (binding [*request* {:params {:a 1 :b 2 :c 3}}]
+    (create {:* mock-name}) => (tpl/completed)
     (provided
-      (ds/retrieve Mock 1) => :entity
-      (ds/delete! :entity) => :ok)))
+      (crud-props jaco.test.crud.actions.Mock) => {:factory identity}
+      (ds/save! {:a 1, :b 2, :c 3}) => :ok))
+
+  (binding [*request* {:params {:a 3 :b 2}}]
+    (update {:* mock-name :id 1}) => (tpl/completed)
+    (provided
+      (ds/retrieve Mock 1) => {:a 1 :b 2 :c 3}
+      (ds/save! {:a 3, :b 2, :c 3}) => :ok))
+
+  (delete {:* mock-name :id 1}) => (tpl/completed)
+  (provided
+    (ds/retrieve Mock 1) => :entity
+    (ds/delete! :entity) => :ok))
 
 
 ;; Now we'll test everything else, so let's redefine crud for Mock
@@ -69,11 +71,13 @@
 
 
 (facts "about defcrud's generated methods"
-  (create Mock {:params :here})  => {:params :here}
-  (update Mock [1 2])            => [1 2]
-  (delete Mock {:params :here})  => {:params :here})
+  (binding [*request* {:* mock-name, :params "params"}]
+    (create *request*) => "params"
+    (update *request*) => "params"
+    (delete *request*) => "params"))
 
 
+;.;. Excellence is not an act but a habit. -- Aristotle
 (facts "about *crud-map*'s content after defcrud"
   (let [{:keys [title overview factory fields]} (*crud-map* Mock)
         {:keys [a b c]} fields]
@@ -103,7 +107,6 @@
   => {:a "1" :b "*2*" :c "3"})
 
 
-;.;. If this isn't nice, I don't know what is. -- Vonnegut
 (facts "about create-page"
   (create-page {:* mock-name})
   => (tpl/view nil [{:title "AAA"

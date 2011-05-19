@@ -1,13 +1,14 @@
 (ns jaco.crud.actions
   (:refer-clojure :exclude [type])
-  (:use [jaco.core.actions :only [*request* *errors* defaction action converter]])
+  (:use [jaco.core.actions :only [*request* *errors* defaction action converter]]
+        [clojure.contrib.macro-utils :only [macrolet]])
   (:require (jaco.crud [datasource :as ds]
                        [templates  :as tpl]
                        [routes     :as routes])))
 
 (def *crud-map* {})
 
-(defn crud-props [type]
+(defn props [type]
   (or (get *crud-map* type)
       (throw (IllegalArgumentException. (str "There is no CRUD for the type " type)))))
 
@@ -18,27 +19,27 @@
                         (constantly "Wrong entity ID."))])
 
 
-(defaction create [type]
-  (let [{:keys [create factory]} (crud-props type)
-        params (:params *request*)]
-    (if create
-      (create params)
-      (do (ds/save! (factory params))
-          (tpl/completed)))))
+(macrolet [(with-default [sym & body]
+             `(if-let [~sym (~(keyword sym) (props ~(symbol "type")))]
+                (~sym (:params *request*))
+                (do ~@body)))]
 
-(defaction update [type id]
-  (if-let [update (:update (crud-props type))]
-    (update (:params *request*))
-    (when-let [entity (ds/retrieve type id)]
-      (ds/save! (merge entity
-                       (select-keys (:params *request*) (keys entity))))
-      (tpl/completed))))
+  (defaction create [type]
+    (with-default create
+      (ds/save! ((:factory (props type)) (:params *request*)))
+      (tpl/completed)))
 
-(defaction delete [type id]
-  (if-let [delete (:delete (crud-props type))]
-    (delete (:params *request*))
-    (do (ds/delete! (ds/retrieve type id))
+  (defaction update [type id]
+    (with-default update
+      (when-let [entity (ds/retrieve type id)]
+        (ds/save! (merge entity
+                         (select-keys (:params *request*) (keys entity))))
         (tpl/completed))))
+
+  (defaction delete [type id]
+    (with-default delete
+      (ds/delete! (ds/retrieve type id))
+      (tpl/completed))))
 
 
 (defn- apply-to-string [entity]
@@ -53,7 +54,7 @@
             (-> ~m
                 (assoc :view ((:view ~m) (name ~k) ~expr))
                 (dissoc :default :to-string)))
-          (:fields (crud-props ~type)))))
+          (:fields (props ~type)))))
 
 
 ;; :default - fn of no args, which used to get default value when creating new entity
@@ -67,7 +68,7 @@
 (defaction overview [type]
   (tpl/overview (map #(vector (routes/update (.getName type) (ds/get-id %))
                               (routes/delete (.getName type) (ds/get-id %))
-                              (select-keys (apply-to-string %) (:overview (crud-props type))))
+                              (select-keys (apply-to-string %) (:overview (props type))))
                      (ds/retrieve-all type))
                 (routes/create (.getName type))))
 
@@ -84,28 +85,21 @@
 
 (defrecord Field [title comment view default to-string])
 
-(defn provide-default-opts [entity-type fields]
-  {:title (str entity-type)
+(defn provide-default-opts [type fields]
+  {:title (str type)
    :overview (map first fields)
    :factory (fn [_]
               (throw (UnsupportedOperationException. "Factory fn is not provided")))})
 
 (defn alter-crud-map
-  [type {:keys [title overview factory create update delete]} fields]
-  `(alter-var-root (var *crud-map*) assoc ~type
-                   {:title ~title
-                    :overview ~(vec (map keyword overview))
-                    :factory ~factory
-                    :create ~create
-                    :update ~update
-                    :delete ~delete
-                    :fields ~(into {} (map (fn [[name title & {:keys [comment view default to-string]}]]
-                                             [(keyword name)
-                                              (Field. title comment
-                                                      (or view tpl/default-view)
-                                                      (or default str)
-                                                      (or to-string str))])
-                                           fields))}))
+  [type opts fields]
+  (letfn [(make-field [[name title & {:keys [comment view default to-string]}]]
+            [name (Field. title comment
+                          (or view tpl/default-view)
+                          (or default str)
+                          (or to-string str))])]
+    `(alter-var-root (var *crud-map*) assoc ~type
+                     ~(assoc opts :fields (into {} (map make-field fields))))))
 
 (defmacro defcrud
   {:arglists '([type opts? & fields])}

@@ -7,12 +7,12 @@
   (:use [jaco.crud.actions :exclude [type]] :reload)
   (:import jaco.crud.actions.Field))
 
-(facts "about crud-props"
-  (crud-props "something wrong")
+(facts "about props"
+  (props "something wrong")
   => (throws IllegalArgumentException "There is no CRUD for the type something wrong")
 
   (binding [*crud-map* {:foo :bar}]
-    (crud-props :foo)) => :bar)
+    (props :foo)) => :bar)
 
 
 ;;================================
@@ -24,7 +24,7 @@
 
 ;; First we'll test default actions
 (defcrud Mock {:factory #(Mock. (:a %) (:b %) (:c %))}
-  (a) (b) (c))
+  (:a) (:b) (:c))
 
 (facts "about default opts"
   (let [{:keys [factory create update delete] :as opts}
@@ -33,12 +33,11 @@
     opts => (contains {:title "Mock" :overview '(foo bar baz)})
     (factory anything)  => (throws UnsupportedOperationException "Factory fn is not provided")))
 
-;; FIXME:  -- 18.05.11
 (facts "about default actions"
   (binding [*request* {:params {:a 1 :b 2 :c 3}}]
     (create {:* mock-name}) => (tpl/completed)
     (provided
-      (crud-props jaco.test.crud.actions.Mock) => {:factory identity}
+      (props jaco.test.crud.actions.Mock) => {:factory identity}
       (ds/save! {:a 1, :b 2, :c 3}) => :ok))
 
   (binding [*request* {:params {:a 3 :b 2}}]
@@ -58,17 +57,16 @@
 (defn my-default [] "default value")
 (defn my-to-string [x] (str \* x \*))
 
-(defcrud Mock {:title "Simple mock", :overview [a]
+(defcrud Mock {:title "Simple mock", :overview [:a]
                :create identity, :update identity, :delete identity}
-  (a "AAA"
-     :comment "Well, it's the A!"
-     :view my-view
-     :default my-default)
-  (b "BB"
-     :to-string my-to-string)
-  (c "C"
-     :default my-default))
-
+  (:a "AAA"
+      :comment "Well, it's the A!"
+      :view my-view
+      :default my-default)
+  (:b "BB"
+      :to-string my-to-string)
+  (:c "C"
+      :default my-default))
 
 (facts "about defcrud's generated methods"
   (binding [*request* {:* mock-name, :params "params"}]
@@ -77,7 +75,6 @@
     (delete *request*) => "params"))
 
 
-;.;. Excellence is not an act but a habit. -- Aristotle
 (facts "about *crud-map*'s content after defcrud"
   (let [{:keys [title overview factory fields]} (*crud-map* Mock)
         {:keys [a b c]} fields]

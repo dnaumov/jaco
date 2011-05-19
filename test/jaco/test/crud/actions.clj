@@ -100,7 +100,7 @@
 ;;================================
 
 (facts "about apply-to-string"
-  (#'jaco.crud.actions/apply-to-string (Mock. 1 2 3))
+  (#'jaco.crud.actions/apply-to-string Mock (Mock. 1 2 3))
   => {:a "1" :b "*2*" :c "3"})
 
 

@@ -42,10 +42,10 @@
       (tpl/completed))))
 
 
-(defn- apply-to-string [entity]
-  (into {}
-        (for [[k v] entity]
-          [k ((-> *crud-map* (get (class entity)) :fields k :to-string) v)])))
+(defn- apply-to-string [type m]
+  (let [fields (-> type props :fields)]
+    (into {} (for [[k v] (select-keys m (keys fields))]
+               [k ((-> fields k :to-string) v)]))))
 
 ;; :view - fn of 2 args, elem name and its value
 (defmacro replace-view [type expr]
@@ -63,14 +63,15 @@
 
 (defaction update-page [type id]
   (when-let [entity (ds/retrieve type id)]
-    (tpl/view id (replace-view type (k (apply-to-string entity))))))
+    (tpl/view id (replace-view type (k (apply-to-string type entity))))))
 
 (defaction overview [type]
-  (tpl/overview (map #(vector (routes/update (.getName type) (ds/get-id %))
-                              (routes/delete (.getName type) (ds/get-id %))
-                              (select-keys (apply-to-string %) (:overview (props type))))
-                     (ds/retrieve-all type))
-                (routes/create (.getName type))))
+  (let [name (.getName type), keys (:overview (props type))]
+    (tpl/overview (for [e (ds/retrieve-all type)]
+                    [(routes/update name (ds/get-id e))
+                     (routes/delete name (ds/get-id e))
+                     (apply-to-string type (select-keys e keys))])
+                  (routes/create name))))
 
 (defaction index []
   (tpl/index (map (fn [[k v]]

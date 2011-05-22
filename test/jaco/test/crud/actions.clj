@@ -8,11 +8,11 @@
   (:import jaco.crud.actions.Field))
 
 (facts "about props"
-  (props "something wrong")
-  => (throws IllegalArgumentException "There is no CRUD for the type something wrong")
+  (props String)
+  => (throws IllegalArgumentException "There is no CRUD for the type: java.lang.String")
 
-  (binding [*crud-map* {:foo :bar}]
-    (props :foo)) => :bar)
+  (binding [*crud-map* {:java.lang.String :bar}]
+    (props String)) => :bar)
 
 
 ;;================================
@@ -76,7 +76,7 @@
 
 
 (facts "about *crud-map*'s content after defcrud"
-  (let [{:keys [title overview factory fields]} (*crud-map* Mock)
+  (let [{:keys [title overview factory fields]} (*crud-map* (keyword mock-name))
         {:keys [a b c]} fields]
     title => "Simple mock"
     overview => [:a]

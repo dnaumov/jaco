@@ -9,8 +9,9 @@
 (def *crud-map* {})
 
 (defn props [type]
-  (or (get *crud-map* type)
-      (throw (IllegalArgumentException. (str "There is no CRUD for the type " type)))))
+  (or (get *crud-map* (-> type .getName keyword))
+      (throw (IllegalArgumentException.
+              (str "There is no CRUD for the type: " (.getName type))))))
 
 (def type [:* (converter #(Class/forName %)
                          (constantly "There is no class with the given name."))])
@@ -99,7 +100,7 @@
                           (or view tpl/default-view)
                           (or default str)
                           (or to-string str))])]
-    `(alter-var-root (var *crud-map*) assoc ~type
+    `(alter-var-root (var *crud-map*) assoc (-> ~type .getName keyword)
                      ~(assoc opts :fields (into {} (map make-field fields))))))
 
 (defmacro defcrud

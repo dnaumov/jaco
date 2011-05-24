@@ -14,15 +14,6 @@
   (before-save [this])
   (after-load  [this]))
 
-(extend-protocol EntityHooks
-  Object
-  (before-save [this] this)
-  (after-load  [this] this)
-  nil
-  (before-save [this] nil)
-  (after-load  [this] nil))
-
-
 (defmacro init [datasource]
   (let [ns (symbol (str "jaco.crud.datasource." (name datasource)))]
     `(do

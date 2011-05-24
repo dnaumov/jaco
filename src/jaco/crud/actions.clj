@@ -1,7 +1,8 @@
 (ns jaco.crud.actions
-  (:refer-clojure :exclude [type])
+  (:refer-clojure :exclude [type replace])
   (:use [jaco.core.actions :only [*request* *errors* defaction action converter]]
-        [clojure.contrib.macro-utils :only [macrolet]])
+        [clojure.contrib.macro-utils :only [macrolet]]
+        [clojure.string :only [capitalize replace]])
   (:require (jaco.crud [datasource :as ds]
                        [templates  :as tpl]
                        [routes     :as routes])))
@@ -14,7 +15,7 @@
               (str "There is no CRUD for the type: " (.getName type))))))
 
 (def type [:* (converter #(Class/forName %)
-                         (constantly "There is no class with the given name."))])
+                         (constantly "There is no class with the given key."))])
 
 (def id [:id (converter #(and (seq %) (Integer/parseInt %))
                         (constantly "Wrong entity ID."))])
@@ -48,14 +49,14 @@
     (into {} (for [[k v] (select-keys m (keys fields))]
                [k ((-> fields k :to-string) v)]))))
 
-;; :view - fn of 2 args, elem name and its value
+;; :view - fn of 2 args, elem key and its value
 (defmacro replace-view [type expr]
   (let [k 'k, m 'm]
     `(map (fn [[~k ~m]]
             (-> ~m
-                (assoc :view ((:view ~m) (name ~k) ~expr))
+                (update-in [:view] #(% (name ~k) ~expr))
                 (dissoc :default :to-string)))
-          (:fields (props ~type)))))
+          (-> ~type props :fields))))
 
 
 ;; :default - fn of no args, which used to get default value when creating new entity
@@ -67,12 +68,12 @@
     (tpl/view id (replace-view type (k (apply-to-string type entity))))))
 
 (defaction overview [type]
-  (let [name (.getName type), keys (:overview (props type))]
+  (let [key (.getName type), keys (:overview (props type))]
     (tpl/overview (for [e (ds/retrieve-all type)]
-                    [(routes/update name (ds/get-id e))
-                     (routes/delete name (ds/get-id e))
+                    [(routes/update key (ds/get-id e))
+                     (routes/delete key (ds/get-id e))
                      (apply-to-string type (select-keys e keys))])
-                  (routes/create name))))
+                  (routes/create key))))
 
 (defaction index []
   (tpl/index (map (fn [[k v]]
@@ -88,15 +89,16 @@
 (defrecord Field [title comment view default to-string])
 
 (defn provide-default-opts [type fields]
-  {:title (str type)
+  {:title (str type "s")
    :overview (map first fields)
    :factory (fn [_]
               (throw (UnsupportedOperationException. "Factory fn is not provided")))})
 
 (defn alter-crud-map
   [type opts fields]
-  (letfn [(make-field [[name title & {:keys [comment view default to-string]}]]
-            [name (Field. title comment
+  (letfn [(make-field [[key & {:keys [title comment view default to-string]}]]
+            [key (Field. (or title (-> key name capitalize (replace "-" " ")))
+                          comment
                           (or view tpl/default-view)
                           (or default str)
                           (or to-string str))])]

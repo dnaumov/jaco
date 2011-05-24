@@ -8,7 +8,7 @@
 (defn encode [s]
   (java.net.URLEncoder/encode (str s)))
 
-(defn- url-args [path]
+(defn- path-args [path]
   (let [path-seq (rest (.split path "/|\\." -1))
         params (filter #(.startsWith % ":") path-seq)]
     (map #(symbol (apply str (rest %))) params)))
@@ -26,12 +26,12 @@
 (defn- make-url-fn [name path opts]
   (let [path (.replace path "*" ":*")
         make-path `(str (::context-path (meta (var ~name))) ~path)
-        args (url-args path)
+        args (path-args path)
         more (gensym "more")]
     `(fn [~@args & ~more]
        ~@(for [a args]
            `(when-let [regex# ((keyword '~a) ~opts)]
-              (when-not (re-matches regex# ~a)
+              (when-not (re-matches regex# (str ~a))
                 (throw (IllegalArgumentException. (str "Param not match the regex: " regex#))))))
        (when-not (even? (count ~more))
          (throw (IllegalArgumentException. "An even number of additional args required")))
@@ -40,7 +40,7 @@
 (defmacro defroute
   {:arglists '([name path opts?])}
   [name path & [opts]]
-  (let [arglists (list 'quote (list (vec (concat (url-args path) '(& get-params)))))
+  (let [arglists (list 'quote (list (vec (concat (path-args path) '(& get-params)))))
         name (with-meta name {:arglists arglists
                               ::path path ::opts opts})]
     `(def ~name ~(make-url-fn name path opts))))

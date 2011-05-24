@@ -30,7 +30,7 @@
   (let [{:keys [factory create update delete] :as opts}
         (provide-default-opts 'Mock '[(foo :something :here) (bar :and :more) (baz)])]
 
-    opts => (contains {:title "Mock" :overview '(foo bar baz)})
+    opts => (contains {:title "Mocks" :overview '(foo bar baz)})
     (factory anything)  => (throws UnsupportedOperationException "Factory fn is not provided")))
 
 (facts "about default actions"
@@ -59,13 +59,13 @@
 
 (defcrud Mock {:title "Simple mock", :overview [:a]
                :create identity, :update identity, :delete identity}
-  (:a "AAA"
+  (:a :title "AAA"
       :comment "Well, it's the A!"
       :view my-view
       :default my-default)
-  (:b "BB"
+  (:b :title "BB"
       :to-string my-to-string)
-  (:c "C"
+  (:c :title "C"
       :default my-default))
 
 (facts "about defcrud's generated methods"

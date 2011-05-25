@@ -36,6 +36,12 @@
   (request safe "/good/second") => "ok"
   (request safe "/bad/second") => "error")
 
+(fact "as well as middlewares"
+  (let [associator #(fn [req] (% (assoc req :params {:foo "here"})))]
+    (defroutes modified {:middlewares [associator]}
+      (route #'params #(:foo %)))
+    (request modified "/anything/something") => "here"))
+
 (fact "last arg is a fn that will be applied to params map (usually it's an action)"
   (request (route #'params (fn [{:keys [first second]}] (str first second)))
            "/foo/bar") => "foobar")

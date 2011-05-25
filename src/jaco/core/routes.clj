@@ -1,4 +1,5 @@
 (ns jaco.core.routes
+  (:refer-clojure :exclude [error-handler])
   (:require [compojure.core  :as compojure])
   (:use [clojure.contrib.def :only [name-with-attributes]]
         [jaco.core.actions   :only [*request* *error-handler*]]
@@ -72,14 +73,20 @@
               handlers)
        (compojure/context ~path [] ~@handlers)))
 
+(defn- bind-err-handler [f]
+  `(fn [handler#]
+     (fn [req#]
+       (binding [*error-handler* ~f]
+         (handler# req#)))))
 
 (defmacro defroutes [name & more]
   (let [[name routes] (name-with-attributes name more)
-        err-handler (-> name meta :error-handler)
-        name (with-meta name (conj (dissoc (meta name) :error-handler)
+        {:keys [error-handler middlewares]} (meta name)
+        middlewares (reverse (if error-handler
+                              (conj middlewares (bind-err-handler error-handler))
+                              middlewares))
+        name (with-meta name (conj (dissoc (meta name) :error-handler :middlewares)
                                    {::routes (vec (map second routes))}))]
-
-    (if err-handler
-      `(def ~name (fn [req#] (binding [*error-handler* ~err-handler]
-                               ((compojure/routes ~@routes) req#))))
-      `(def ~name (compojure/routes ~@routes)))))
+    `(def ~name ~(if (seq middlewares)
+                   `((comp ~@middlewares) (compojure/routes ~@routes))
+                   `(compojure/routes ~@routes)))))

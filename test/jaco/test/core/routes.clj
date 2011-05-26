@@ -66,13 +66,24 @@
   (regex "42") => "/42"
   (regex "foo") => (throws IllegalArgumentException))
 
-
 (fact "you should use context macro for the correct generation of relative urls"
   (defroutes module-routes
-    (route #'simple identity))
+    (route #'simple (constantly "ok")))
   (defroutes your-app
     (context "/module-name" module-routes))
+  (request your-app "/module-name/foo/bar") => "ok"
   (simple) => "/module-name/foo/bar")
+
+(fact "contexts can be nested"
+  (defroutes contextual
+    (route #'params (constantly "ok")))
+  (context "/there"
+    (context "/will"
+      (context "/be"
+        (context "/a"
+          (context "/long"
+            contextual)))))
+  (params "long" "url") => "/there/will/be/a/long/long/url")
 
 
 (facts "about url constructing"
@@ -89,8 +100,7 @@
 
 (def ^{:macro true} make-route @#'jaco.core.routes/make-route)
 (facts "about make-route"
-  (let [;make-route #'jaco.core.routes/make-route
-        r (make-route :get "/foo" nil [(constantly "foo!")])
+  (let [r (make-route :get "/foo" nil [(constantly "foo!")])
         rr (make-route :get "/foo/:id" {:id #"[0-9]+"} [(constantly "foo!")])]
 
     (request r "/foo") => "foo!"
@@ -109,3 +119,28 @@
     (set-context-path! #'params "/foo")
     (ctxt #'simple) => "/ctxt"
     (ctxt #'params) => "/foo"))
+
+
+(facts "about defroutes and context"
+  (defroutes a
+    (route #'simple identity))
+  (meta a) => {:jaco.core.routes/routes {#'simple nil}}
+
+  (defroutes b
+    a (route #'params identity))
+  (meta b) => {:jaco.core.routes/routes {#'simple nil, #'params nil}}
+
+  (defroutes c
+    (context "/foo" a) (route #'params identity))
+  (meta c) => {:jaco.core.routes/routes {#'simple "/foo", #'params nil}}
+
+  (meta
+   (context "/a" (context "/b" (context "/c" a))))
+  => {:jaco.core.routes/routes {#'simple "/a/b/c"}}
+
+  (defroutes d (route #'params identity))
+  (meta (context "/x"
+          (context "/a" a)
+          (context "/d" d)))
+  => {:jaco.core.routes/routes {#'simple "/x/a"
+                                #'params "/x/d"}})

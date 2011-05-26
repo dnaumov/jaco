@@ -68,10 +68,14 @@
   (alter-meta! route-var assoc ::context-path path))
 
 (defmacro context [path & handlers]
-  `(do ~@(map (fn [h] `(doseq [r# (-> ~h var meta ::routes)]
-                         (set-context-path! r# ~path)))
-              handlers)
-       (compojure/context ~path [] ~@handlers)))
+  `(let [route+ctxt# (map #(update-in % [1] (partial str ~path))
+                          (apply merge (map #(-> % meta ::routes) [~@handlers])))]
+     (do
+       (doseq [[route# ctxt#] route+ctxt#]
+         (set-context-path! route# ctxt#))
+       (with-meta (compojure/context ~path [] ~@handlers)
+         {::routes (into {} route+ctxt#)}))))
+
 
 (defn- bind-err-handler [f]
   `(fn [handler#]
@@ -79,14 +83,22 @@
        (binding [*error-handler* ~f]
          (handler# req#)))))
 
+(defn- routes-meta [routes]
+  (let [named-route? #(and (coll? %) (= (first %) 'route))]
+    `(merge
+      ~(into {} (map (fn [[_ route-var]] [route-var nil])
+                     (filter named-route? routes)))
+      ~@(map (fn [x] `(::routes (meta ~x)))
+             (filter (complement named-route?) routes)))))
+
 (defmacro defroutes [name & more]
   (let [[name routes] (name-with-attributes name more)
         {:keys [error-handler middlewares]} (meta name)
         middlewares (reverse (if error-handler
-                              (conj middlewares (bind-err-handler error-handler))
-                              middlewares))
-        name (with-meta name (conj (dissoc (meta name) :error-handler :middlewares)
-                                   {::routes (vec (map second routes))}))]
-    `(def ~name ~(if (seq middlewares)
-                   `((comp ~@middlewares) (compojure/routes ~@routes))
-                   `(compojure/routes ~@routes)))))
+                               (conj middlewares (bind-err-handler error-handler))
+                               middlewares))
+        name (with-meta name (dissoc (meta name) :error-handler :middlewares))]
+    `(def ~name (with-meta ~(if (seq middlewares)
+                              `((comp ~@middlewares) (compojure/routes ~@routes))
+                              `(compojure/routes ~@routes))
+                  {::routes ~(routes-meta routes)}))))

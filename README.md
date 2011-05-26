@@ -15,8 +15,10 @@ more docs will be available soon
 ## Installation
 
 Add following to your `:dependencies` in project.clj:
-    [jaco "0.0.1-SNAPSHOT"]
+
+	[jaco "0.0.1-SNAPSHOT"]
     
 To run the tests, clone the repo and run:
-    lein deps
-    lein midje
+
+	lein deps
+	lein midje

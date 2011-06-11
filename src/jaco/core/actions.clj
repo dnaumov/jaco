@@ -74,18 +74,22 @@
 
 ;; returns a fn: Param -> Param
 (defn validator
-  [pred errfn & {:keys [ensure?] :or {ensure? false}}]
+  [pred err & {:keys [ensure?] :or {ensure? false}}]
   (fn [{:keys [key val errors]}]
     (if (or (and ensure? (seq errors)) (pred val))
       (Param. key val errors)
-      (Param. key val (conj errors (errfn key val errors))))))
+      (Param. key val (conj errors (if (fn? err)
+                                     (err key val errors)
+                                     err))))))
 
 (defn converter
-  [f errfn & {:keys [ensure?] :or {ensure? false}}]
+  [f err & {:keys [ensure?] :or {ensure? false}}]
   (fn [{:keys [key val errors]}]
     (if (and ensure? (seq errors))
       (Param. key val errors)
       (try
         (Param. key (f val) errors)
         (catch Exception e
-          (Param. key val (conj errors (errfn key val errors))))))))
+          (Param. key val (conj errors (if (fn? err)
+                                         (err key val errors)
+                                         err))))))))

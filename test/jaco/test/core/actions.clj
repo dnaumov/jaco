@@ -20,11 +20,11 @@
 (fact "rest of each arg-vector contains special functions")
 
 (fact "such a function can be either a converter..."
-  (let [conv (converter inc (constantly "error message here"))]
+  (let [conv (converter inc "error message here")]
     ((action [[:x conv]] (str "x is " x)) {:x 1}) => "x is 2"))
 
 (fact "or a validator. Body of the action will be executed only if validators pass."
-  (def check-positive (validator pos? (constantly "not positive")))
+  (def check-positive (validator pos? "not positive"))
   ((action [[:x check-positive]] x) {:x 1})
   => 1)
 
@@ -37,17 +37,17 @@
 (alter-var-root (var *error-handler*) (constantly #(map (comp first :errors) %)))
 
 (fact "converters fail by throwing an exception"
-  (def parse-int (converter #(Integer/parseInt %) (constantly "not an int")))
+  (def parse-int (converter #(Integer/parseInt %) "not an int"))
   (Integer/parseInt "foo") => (throws NumberFormatException)
   ((action [[:x parse-int]] x) {:x "foo"}) => ["not an int"])
 
 (fact "you can use :ensure? to prevent calling a fn if errors occured on the previous steps"
   (let [bad check-positive
-        good (validator pos? (constantly "not pos") :ensure? true)]
+        good (validator pos? "not pos" :ensure? true)]
     ((action [[:x parse-int bad]] x) {:x "foo"}) => (throws RuntimeException)
     ((action [[:x parse-int good]] x) {:x "foo"}) => ["not an int"]))
 
-(fact "errfn is a fn of 3 args: key of param, its value and coll of errors"
+(fact "last arg can be either a string, or a fn of 3 args: key of param, its value and coll of errors"
   (let [strs {:pass "Password", :login "Login"}
         errfn (fn [k _ _] (str (k strs) " is too short!"))
         check-length (validator #(> (count %) 5) errfn)
@@ -61,7 +61,7 @@
 
 (fact "body is executed even if there are errors when *error-handler* is nil"
   ((action {:error-handler nil}
-     [[:x (validator (constantly false) (constantly "foo"))]]
+     [[:x (validator (constantly false) "foo")]]
      :body) {}) => :body)
 
 (fact "(action ...) returns an anonymous fn, but normally you would have a named one"
@@ -73,12 +73,6 @@
 
 (fact "you can also use keywords in args, that's the same as one-elem vector"
   ((action [:x :y :z] [z y x]) {:x 1 :y 2 :z 3}) => [3 2 1])
-
-
-(comment ;; so, action's args can be reused
-  (def entity [:id parse-int get-from-db ensure-non-nil])
-  (defaction [entity]
-    ...))
 
 
 ;;================================

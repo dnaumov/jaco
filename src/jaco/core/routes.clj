@@ -52,7 +52,8 @@
   (let [req-sym (gensym "request")
         path `(route-compile ~path (or ~opts {}))
         body `(binding [*request* ~req-sym]
-                ((apply comp (reverse ~fns)) (:params ~req-sym)))]
+                ((apply comp (map #(fn [x#] (when x# (% x#))) (reverse ~fns)))
+                 (:params ~req-sym)))]
     (#'compojure/compile-route method path req-sym [body])))
 
 (defn route

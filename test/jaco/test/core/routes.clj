@@ -46,6 +46,14 @@
   (request (route #'params (fn [{:keys [first second]}] (str first second)))
            "/foo/bar") => "foobar")
 
+(fact "there can be more than one function (usually second one is a template)"
+  (request (route #'params identity :first #(.toUpperCase %)) "/sparta/athens")
+  => "SPARTA")
+
+(fact "if any of the fns returns nil, then the whole handler will return nil"
+  (request (route #'simple (constantly nil) inc) "/foo/bar")
+  => nil)
+
 (fact "you can specify method which route will match; default one is :get"
   (let [r (route #'simple :post (constantly "matches"))]
     (request r "/foo/bar") => nil
@@ -110,7 +118,10 @@
     (request rr "/foo/42") => "foo!"
 
     (request (make-route :get "/foo/:bar" nil [:bar #(.toUpperCase %)]) "/foo/baar")
-    => "BAAR"))
+    => "BAAR"
+
+    (request (make-route :get "/foo" nil [(constantly nil) str]) "/foo")
+    => nil))
 
 
 (facts "about set-context-path!"

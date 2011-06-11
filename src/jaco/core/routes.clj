@@ -15,14 +15,18 @@
     (map #(symbol (apply str (rest %))) params)))
 
 (defn- url-constructor [path args get-params]
-  `(str
-    (-> ~path
-        ~@(for [a args]
-            `(.replace (str ":" '~a) (encode ~a))))
-    (when-let [get-params# (seq ~get-params)]
-      (str "?" (join "&" (map #(str %1 "=" %2)
-                              (map (comp encode name key) get-params#)
-                              (map (comp encode val) get-params#)))))))
+  `(let [{[anch#] true, get-params# false} (group-by #(= (key %) :#) ~get-params)
+         str-when# (fn [test# & exprs#] (when test# (apply str exprs#)))]
+     (str
+      (-> ~path
+          ~@(for [a args]
+              `(.replace (str ":" '~a) (encode ~a))))
+      (str-when# anch# "#" (second anch#))
+      (str-when# (seq get-params#)
+                 "?"
+                 (join "&" (map #(str %1 "=" %2)
+                                (map (comp encode name key) get-params#)
+                                (map (comp encode val) get-params#)))))))
 
 (defn- make-url-fn [name path opts]
   (let [path (.replace path "*" ":*")
@@ -33,7 +37,7 @@
        ~@(for [a args]
            `(when-let [regex# ((keyword '~a) ~opts)]
               (when-not (re-matches regex# (str ~a))
-                (throw (IllegalArgumentException. (str "Param not match the regex: " regex#))))))
+                (throw (IllegalArgumentException. (str "Param doesn't match the regex: " regex#))))))
        (when-not (even? (count ~more))
          (throw (IllegalArgumentException. "An even number of additional args required")))
        ~(url-constructor make-path args `(apply array-map ~more)))))

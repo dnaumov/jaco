@@ -74,6 +74,10 @@
   (regex "42") => "/42"
   (regex "foo") => (throws IllegalArgumentException))
 
+(fact "it's possible to specify get-parameters and anchor for the url"
+  (simple :baz "qux") => "/foo/bar?baz=qux"
+  (simple :# "anchor") => "/foo/bar#anchor")
+
 (fact "you should use context macro for the correct generation of relative urls"
   (defroutes module-routes
     (route #'simple (constantly "ok")))
@@ -155,3 +159,7 @@
           (context "/d" d)))
   => {:jaco.core.routes/routes {#'simple "/x/a"
                                 #'params "/x/d"}})
+
+;; Reset contexts
+(set-context-path! #'simple "")
+(set-context-path! #'params "")

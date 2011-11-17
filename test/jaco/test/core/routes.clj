@@ -1,94 +1,127 @@
 (ns jaco.test.core.routes
   (:use midje.sweet
         [jaco.core.actions :only [*request* *error-handler*]])
-  (:use jaco.core.routes :reload-all))
+  (:use jaco.core.routes
+        [jaco.core.view :only [defview]] :reload)
+  (:import jaco.core.routes.NamedRoute))
 
-(defn request [handler uri & options]
-  (:body (handler (conj {:request-method :get :uri uri} (apply hash-map options)))))
+;; Some helper functions
 
-(defn request-route [r uri]
-  (request (route r #(hash-map :body %)) uri))
+(defn request [h url & params]
+  (let [f (fn [default] #(if (seq %) % default))
+        with-default #(-> %
+                          (update-in [:actions] (f {:get identity}))
+                          (update-in [:views] (f {:any {:any (fn [x] {:body x})}})))
+        h (if (named-route? h) (handler [(with-default h)]) h)]
+    (:body (h (merge {:request-method :get :uri url}
+                     (apply hash-map params))))))
+
+(def matches? (comp boolean request))
 
 
-(fact "you can define named route with defroute"
-  (defroute simple "/foo/bar")
-  (request-route #'simple "/foo/bar") => {}
-  (request-route #'simple "/qux") => nil)
+(fact "Named route is defined with the defroute macro."
+  (defroute foo "/foo")
+  (matches? foo "/foo") => true
+  (matches? foo "/qux") => false
+  foo => (just (NamedRoute. {} {} "/foo" nil fn?)))
 
-(fact "uri string uses the same syntax as compojure routes"
+(fact "URL string uses the same syntax as Compojure's one."
   (defroute params "/:first/:second")
-  (request-route #'params "/foo/1") => {:first "foo" :second "1"})
+  (request params "/foo/1") => {:first "foo" :second "1"})
 
-(fact "you can generate handler from the named route with the route fn"
-  (let [handler (route #'simple (constantly "ok"))]
-    (request handler "/foo/bar") => "ok"))
-
-(fact "then, you can combine several handlers into one by using defroutes (as in compojure)"
-  (defroutes compound
-    (route #'simple (constantly "simple"))
-    (route #'params (constantly "params")))
-  (request compound "/foo/bar") => "simple"
-  (request compound "/qwe/asd") => "params")
-
-(fact "it's possible to specify error handler for the routes"
-  (defroutes safe {:error-handler (constantly "error")}
-    (route #'params #(if (= "good" (:first %)) "ok" (*error-handler*))))
-  (request safe "/good/second") => "ok"
-  (request safe "/bad/second") => "error")
-
-(fact "as well as middlewares"
-  (let [associator #(fn [req] (% (assoc req :params {:foo "here"})))]
-    (defroutes modified {:middlewares [associator]}
-      (route #'params #(:foo %)))
-    (request modified "/anything/something") => "here"))
-
-(fact "last arg is a fn that will be applied to params map (usually it's an action)"
-  (request (route #'params (fn [{:keys [first second]}] (str first second)))
-           "/foo/bar") => "foobar")
-
-(fact "there can be more than one function (usually second one is a template)"
-  (request (route #'params identity :first #(.toUpperCase %)) "/sparta/athens")
-  => "SPARTA")
-
-(fact "if any of the fns returns nil, then the whole handler will return nil"
-  (request (route #'simple (constantly nil) inc) "/foo/bar")
-  => nil)
-
-(fact "you can specify method which route will match; default one is :get"
-  (let [r (route #'simple :post (constantly "matches"))]
-    (request r "/foo/bar") => nil
-    (request r "/foo/bar" :request-method :post) => "matches"))
-
-(fact "you can specify regexes for uri parameters"
+(fact "You can specify regexes for the params."
   (defroute regex "/:id" {:id #"[0-9]+"})
-  (request-route #'regex "/foo") => nil
-  (request-route #'regex "/42") => {:id "42"})
+  (:opts regex) =>  (just {:id anything})
+  (request regex "/foo") => nil
+  (request regex "/42") => {:id "42"})
 
-(fact "route binds *request* to the current request map"
-  (request (route #'simple (fn [_] {:body *request*})) "/foo/bar")
-  => (contains {:request-method :get, :uri "/foo/bar", :params {}}))
-
-(fact "defroute also creates a fn for url generation"
-  (simple) => "/foo/bar"
+(fact "defroute also creates a fn which will generate corresponding URL."
+  (foo) => "/foo"
   (params "bar" "baz") => "/bar/baz"
   (regex "42") => "/42"
   (regex "foo") => (throws IllegalArgumentException))
 
-(fact "it's possible to specify get-parameters and anchor for the url"
-  (simple :baz "qux") => "/foo/bar?baz=qux"
-  (simple :# "anchor") => "/foo/bar#anchor")
+(fact "It's possible to specify URL parameters and anchor."
+  (foo :baz "qux") => "/foo?baz=qux"
+  (foo :# "anchor") => "/foo#anchor")
 
-(fact "you should use context macro for the correct generation of relative urls"
-  (defroutes module-routes
-    (route #'simple (constantly "ok")))
-  (defroutes your-app
+(fact "Then, define action for the route. Application logic goes here."
+  (defaction foo :get [] "action")
+  (defaction params :get [first second] (str first second))
+  (request foo "/foo") => "action"
+  (request params "/a/b") => "ab")
+
+(fact "If you set only route, the action will match any method."
+  (defaction foo [] "match")
+  (request foo "/foo" :request-method :put) => "match")
+
+(fact "If action or view returns nil, then the whole route returns
+       nil and so doesn't match the request."
+  (defaction regex :get [_] nil)
+  (request regex "/1") => nil)
+
+(fact "Var *request* will be bound to the current ring request map."
+  (defaction foo :get [_] *request*)
+  (request foo "/foo") => (contains {:request-method :get, :uri "/foo", :params {}}))
+
+(fact "Value returned by action will be passed to the view function. Last arg
+       specifies the value of the *output* var at which the view will be applied."
+  (defview params :get :html [x]   
+    (str "<html>" x "</html>"))
+  (with-output :html
+    (request params "/foo/bar")) => "<html>foobar</html>")
+
+(fact "You don't have to write the last arg if you don't plan to make
+       different output formats - view will match any *output* value."
+  (defview foo :get [_] "match")
+  (request foo "/foo") => "match")
+
+(fact "Also it's possible to define generic views which will be applied to
+       all routes. In such case one should specify only output format."
+  (defview :xml [_] "xmlized")
+  (with-output :xml
+    (request foo "/foo" :request-method :post) => "xmlized"
+    (request params "/a/b") => "xmlized"))
+
+(fact "In fact, you can omit any arg and make whatever combination you want."
+  (defview foo [_] "route")
+  (defview :get [_] "method")
+  (defview foo :html [_] "route and output")
+  (with-output :whatever
+    (request foo "/foo" :request-method :put) => "route"
+    (request params "/1/2") => "method")
+  (with-output :html
+    (request foo "/foo" :request-method :delete) => "route and output"))
+
+(fact "You can combine several routes into one handler using defhandler macro."
+  (defhandler combined
+    #'foo #'params)
+  (matches? combined "/foo") => true
+  (matches? combined "/a/b") => true)
+
+;; TODO:
+(future-fact "it's possible to specify error handler for the routes"
+             (defroutes safe {:error-handler (constantly "error")}
+               (route #'params #(if (= "good" (:first %)) "ok" (*error-handler*))))
+             (request safe "/good/second") => "ok"
+             (request safe "/bad/second") => "error")
+
+(fact "As well as coll of middleware functions."
+  (let [replacer (fn [h] (fn [r] {:body "fixed"}))]
+    (defhandler modified {:middleware [replacer]}
+      #'foo)
+    (request modified "/foo") => "fixed"))
+
+(fact "You should use context macro in order to generate relative urls correctly."
+  (defhandler module-routes
+    #'foo)
+  (defhandler your-app
     (context "/module-name" module-routes))
-  (request your-app "/module-name/foo/bar") => "ok"
-  (simple) => "/module-name/foo/bar")
+  (matches? your-app "/module-name/foo") => true
+  (foo) => "/module-name/foo")
 
-(fact "contexts can be nested"
-  (defroutes contextual
-    (route #'params (constantly "ok")))
+(fact "Contexts can be nested."
+  (defhandler contextual #'params)
   (context "/there"
     (context "/will"
       (context "/be"
@@ -98,17 +131,20 @@
   (params "long" "url") => "/there/will/be/a/long/long/url")
 
 
+
 (facts "about url constructing"
-  (defroute foo "/:a/:b")
+  (defroute qux "/:a/:b")
 
-  (foo "whoa!" "bo o?") => "/whoa%21/bo+o%3F"
-  (foo "a" "b" :c "foo") => "/a/b?c=foo"
-  (foo "a" nil :foo "bar")  => "/a/?foo=bar"
-  (foo "a" "b" :c) => (throws IllegalArgumentException)
+  (qux "whoa!" "bo o?") => "/whoa%21/bo+o%3F"
+  (qux "a" "b" :c "qux") => "/a/b?c=qux"
+  (qux "a" nil :qux "bar")  => "/a/?qux=bar"
+  (qux "a" "b" :c) => (throws IllegalArgumentException)
 
-  (set-context-path! #'foo "/foo")
-  (foo "a" "b") => "/foo/a/b")
+  (set-context #'qux "/qux")
+  (qux "a" "b") => "/qux/a/b")
 
+(facts "about combine-fns"
+  ((combine-fns [inc str]) 1) => "2")
 
 (def ^{:macro true} make-route @#'jaco.core.routes/make-route)
 (facts "about make-route"
@@ -128,38 +164,43 @@
     => nil))
 
 
-(facts "about set-context-path!"
-  (letfn [(ctxt [v] (:jaco.core.routes/context-path (meta v)))]
-    (set-context-path! #'simple "/ctxt")
-    (set-context-path! #'params "/foo")
-    (ctxt #'simple) => "/ctxt"
-    (ctxt #'params) => "/foo"))
+(facts "about set-context"
+  (set-context #'foo "/ctxt")
+  (set-context #'params "/foo")
+  (:context foo) => "/ctxt"
+  (:context params) => "/foo")
 
+(comment ;; can't be done since make-route is a macro
+  (facts "about construct-routes"
+    (binding [make-route vector]
+      (construct-routes {:actions {:get "get-action"
+                                   :post "post-action"}
+                         :views {:get {:any "get-view"}
+                                 :any {:any "any-view"}}
+                         :path "path"}))
+    => [[:get "path" nil ["get-action" "get-view"]]
+        [:post "path" nil ["post-action" "any-view"]]]))
 
-(facts "about defroutes and context"
-  (defroutes a
-    (route #'simple identity))
-  (meta a) => {:jaco.core.routes/routes {#'simple nil}}
+(facts "about defhandler and context"
+  (letfn [(routes [x] (-> x meta :jaco.core.routes/routes))]
+    (defhandler a, #'foo)
+    (routes a) => {#'foo nil}
 
-  (defroutes b
-    a (route #'params identity))
-  (meta b) => {:jaco.core.routes/routes {#'simple nil, #'params nil}}
+    (defhandler b, a #'params)
+    (routes b) => {#'foo nil, #'params nil}
 
-  (defroutes c
-    (context "/foo" a) (route #'params identity))
-  (meta c) => {:jaco.core.routes/routes {#'simple "/foo", #'params nil}}
+    (defhandler c, (context "/foo" a) #'params)
+    (routes c) => {#'foo "/foo", #'params nil}
 
-  (meta
-   (context "/a" (context "/b" (context "/c" a))))
-  => {:jaco.core.routes/routes {#'simple "/a/b/c"}}
+    (routes (context "/a" (context "/b" (context "/c" a))))
+    => {#'foo "/a/b/c"}
 
-  (defroutes d (route #'params identity))
-  (meta (context "/x"
-          (context "/a" a)
-          (context "/d" d)))
-  => {:jaco.core.routes/routes {#'simple "/x/a"
-                                #'params "/x/d"}})
+    (defhandler d, #'params)
+    (routes (context "/x"
+              (context "/a" a)
+              (context "/d" d)))
+    => {#'foo "/x/a" #'params "/x/d"}))
 
 ;; Reset contexts
-(set-context-path! #'simple "")
-(set-context-path! #'params "")
+(set-context #'foo "")
+(set-context #'params "")

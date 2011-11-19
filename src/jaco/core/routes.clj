@@ -1,7 +1,7 @@
 (ns jaco.core.routes
   (:require [compojure.core  :as compojure])
   (:use [jaco.core.actions   :only [*request* *error-handler*]]
-        [clojure.contrib.def :only [name-with-attributes]]
+        [clojure.tools.macro :only [name-with-attributes]]
         [clojure.string      :only [join]]
         [clout.core          :only [route-compile]]))
 
@@ -85,7 +85,7 @@
                      (fn [{:keys [~@args]}] ~@body))))
 
 (def generic-views {})
-(def *output* nil)
+(def ^:dynamic *output* nil)
 
 (defmacro with-output [val & body]
   `(binding [*output* ~val] ~@body))
@@ -144,20 +144,16 @@
               (remove var? handlers))))
 
 
-(defn comp*
-  ([] identity)
-  ([& fs] (apply comp fs)))
-
 (defmacro defhandler
   "TODO: write"
   [name & more]
   (let [[name routes] (name-with-attributes name more)
         {:keys [error-handler middleware]} (meta name)
         name (vary-meta name dissoc :error-handler :middleware)
-        middleware (apply comp* (reverse
-                                  (if error-handler
-                                    (conj middleware (bind-err-handler error-handler))
-                                    middleware)))
+        middleware (apply comp (reverse
+                                (if error-handler
+                                  (conj middleware (bind-err-handler error-handler))
+                                  middleware)))
         var? #(and (coll? %) (= (first %) 'var))
         routes* (map #(if (var? %) (second %) %) routes)]
     `(def ~name (with-meta (~middleware (handler [~@routes*]))

@@ -1,9 +1,11 @@
 (ns jaco.core.routes
   (:require [compojure.core  :as compojure])
-  (:use [jaco.core.actions   :only [*request* *error-handler*]]
-        [clojure.tools.macro :only [name-with-attributes]]
+  (:use [clojure.tools.macro :only [name-with-attributes]]
         [clojure.string      :only [join]]
         [clout.core          :only [route-compile]]))
+
+(def ^{:doc "TODO: write"} ^:dynamic *request*)
+(def ^{:doc "TODO: write"} ^:dynamic *error-handler* nil)
 
 ;;; url generation
 
@@ -73,16 +75,6 @@
 
 
 ;;; view
-
-(defmacro defaction ;; TODO: move to actions ns
-  "TODO: write"
-  {:arglists '([route method? args & body])}
-  [route method-or-args & [m & ms :as more]]
-  (let [[method args body] (if (keyword? method-or-args)
-                             [method-or-args m ms]
-                             [:any method-or-args more])]
-    `(alter-var-root (var ~route) assoc-in [:actions ~method]
-                     (fn [{:keys [~@args]}] ~@body))))
 
 (def generic-views {})
 (def ^:dynamic *output* nil)

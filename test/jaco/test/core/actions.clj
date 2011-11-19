@@ -1,6 +1,8 @@
 (ns jaco.test.core.actions
   (:use midje.sweet)
-  (:use jaco.core.actions :reload-all))
+  (:use jaco.core.actions
+        [jaco.core.routes :only [*error-handler*]]
+        :reload))
 
 ;; actions will return :error if validator/converter has failed (more on that later)
 (alter-var-root #'*error-handler* (constantly (constantly :error)))

@@ -1,8 +1,8 @@
 (ns jaco.test.core.routes
-  (:use midje.sweet
-        [jaco.core.actions :only [*request* *error-handler*]])
+  (:use midje.sweet)
   (:use jaco.core.routes
-        [jaco.core.view :only [defview]] :reload)
+        [jaco.core.actions :only [defaction]]
+        [jaco.core.view    :only [defview]] :reload)
   (:import jaco.core.routes.NamedRoute))
 
 ;; Some helper functions

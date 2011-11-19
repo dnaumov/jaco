@@ -1,9 +1,7 @@
-(ns jaco.core.actions)
+(ns jaco.core.actions
+  (:use [jaco.core.routes :only [*request* *error-handler*]]))
 
-(def ^{:doc "TODO: write"} ^:dynamic *request*)
-(def ^{:doc "TODO: write"} ^:dynamic *error-handler* nil)
 (def ^{:doc "TODO: write"} ^:dynamic *errors*)
-
 
 (defmulti make-param-fn
   "Given name (a keyword) and any number of arguments, returns appropriate
@@ -47,7 +45,7 @@
                    [(conj acc [next checkers]) []]
                    [acc (conj checkers next)]))
                [[] []])
-       first 
+       first
        (map (fn [[sym checkers]]
               (if-let [t (-> sym meta :tag)]
                 [sym t]
@@ -101,6 +99,15 @@
              (wrap-error-handler opts)
              (wrap-processing params)))))
 
+(defmacro defaction
+  "TODO: write"
+  {:arglists '([route method? args & body])}
+  [route method-or-args & [m & ms :as more]]
+  (let [[method args body] (if (keyword? method-or-args)
+                             [method-or-args m ms]
+                             [:any method-or-args more])]
+    `(alter-var-root (var ~route) assoc-in [:actions ~method]
+                     (fn [{:keys [~@args]}] ~@body))))
 
 
 (do

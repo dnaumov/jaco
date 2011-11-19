@@ -1,117 +1,92 @@
 (ns jaco.test.core.actions
   (:use midje.sweet)
-  (:use jaco.core.actions :reload-all)
-  (:import jaco.core.actions.Param))
+  (:use jaco.core.actions :reload-all))
 
-;;================================
-;; Examples
-;;================================
+;; actions will return :error if validator/converter has failed (more on that later)
+(alter-var-root #'*error-handler* (constantly (constantly :error)))
 
-(fact "actions are fns of a map"
+
+(fact "Actions are functions of one argument - a map."
   ((action [] :foo) {}) => :foo)
 
-(fact "args are vectors, first elem of which is a key"
-  ((action [[:x] [:y]] (str x y)) {:x 4 :y 2}) => "42")
+(fact "The map is automatically destructed (as in {:keys [...]})."
+  ((action [x y] (str x y)) {:x 4 :y 2}) => "42")
 
-(fact "args evaluated, and locals named as in binding vector even if the keys are different"
-  (let [a [:x], b [:y]]
-    ((action [a b] (str a b)) {:x 4 :y 2}) => "42"))
+(fact "You can specify validator for a param. Body of the action
+        will be executed only if validator returned true."
+  (let [a (action [:pos? x] x)]
+    (a {:x 1}) => 1
+    (a {:x 0}) => :error))
 
-(fact "rest of each arg-vector contains special functions")
+(fact "Also, you can specify a converter - fn which will be applied to the param's value."
+  (let [a (action [:int x] x)]
+    (a {:x "1"}) => 1
+    (a {:x "not-convertable-to-int"}) => :error))
 
-(fact "such a function can be either a converter..."
-  (let [conv (converter inc "error message here")]
-    ((action [[:x conv]] (str "x is " x)) {:x 1}) => "x is 2"))
+(fact "It's possible to specify more that one validator/converter."
+  ((action [:int :pos? :inc x] x) {:x "1"}) => 2)
 
-(fact "or a validator. Body of the action will be executed only if validators pass."
-  (def check-positive (validator pos? "not positive"))
-  ((action [[:x check-positive]] x) {:x 1})
-  => 1)
+(fact "To pass arguments to a converter or validator, use the following syntax:"
+  ((action [(:max-length 10) x] x) {:x "foo"}) => "foo")
 
-(fact "If not, *error-handler* is called with the errors coll as an arg"
-  (binding [*error-handler* identity]
-    ((action [[:x check-positive]] x) {:x 0})
-    => (just [{:key :x, :val 0, :errors ["not positive"]}])))
+(fact "When you want to specify several validators with a single arg, you
+       can use alternative syntax with maps. It's a little more concise,
+       but remember that order of map entries doesn't guaranteed to preserve."
+  (let [a (action [{:min-length 3 :max-length 6} x] x)]
+    (a {:x "foo"}) => "foo"
+    (a {:x "f"}) => :error))
 
-;; return only first error message of each parameter
-(alter-var-root (var *error-handler*) (constantly #(map (comp first :errors) %)))
+(fact "If some combination of validators/converters is used often, then it
+       makes sense to save it in the var and reuse it in several actions."
+  (let [password [[:min-length 6] [:max-length 16] [:make-hash]]]
+    ((action [^password x] x) {:x "hacker"}) => (hash "hacker")))
 
-(fact "converters fail by throwing an exception"
-  (def parse-int (converter #(Integer/parseInt %) "not an int"))
-  (Integer/parseInt "foo") => (throws NumberFormatException)
-  ((action [[:x parse-int]] x) {:x "foo"}) => ["not an int"])
+(fact "All of the above options can be used together."
+  (let [a (action [{:min-length 2 :max-length 3} (:matches? #"[0-9]+") :int x] x)]
+    (a {:x "12"}) => 12
+    (a {:x "foo"}) => :error))
 
-(fact "you can use :ensure? to prevent calling a fn if errors occured on the previous steps"
-  (let [bad check-positive
-        good (validator pos? "not pos" :ensure? true)]
-    ((action [[:x parse-int bad]] x) {:x "foo"}) => (throws RuntimeException)
-    ((action [[:x parse-int good]] x) {:x "foo"}) => ["not an int"]))
+(fact "You can define your own converters and validators. "
+  (defconverter :adder [x] (fn [val] (+ val x)))
+  ((action [{:adder 10} x] x) {:x 1}) => 11
 
-(fact "last arg can be either a string, or a fn of 3 args: key of param, its value and coll of errors"
-  (let [strs {:pass "Password", :login "Login"}
-        errfn (fn [k _ _] (str (k strs) " is too short!"))
-        check-length (validator #(> (count %) 5) errfn)
-        an-action (action [[:login check-length] [:pass check-length]])]
+  (defvalidator :funky? [_] #{"the meters" "dirty dozen brass band"})
 
-    (an-action {:login "pyotr" :pass "12345"})
-    => ["Login is too short!" "Password is too short!"]))
+  (let [f (comp :passed? (make-param-fn :funky? nil))]
+    (f "the meters") => true
+    (f "metallica") => false))
 
-(fact "*error-handler* can be rebinded for the current action with the action's opts"
+;; TODO: error-handler stuff
+
+(fact "*error-handler* can be rebound for the current action."
   ((action {:error-handler :a-fn} [] *error-handler*) {}) => :a-fn)
 
-(fact "body is executed even if there are errors when *error-handler* is nil"
-  ((action {:error-handler nil}
-     [[:x (validator (constantly false) "foo")]]
-     :body) {}) => :body)
-
-(fact "(action ...) returns an anonymous fn, but normally you would have a named one"
-  (defaction foo "doc-string"
-    [[:x parse-int check-positive] [:y]]
-    (str x y))
-  (foo {:x "4" :y "2"}) => "42"
-  (-> foo var meta :doc) => "doc-string")
-
-(fact "you can also use keywords in args, that's the same as one-elem vector"
-  ((action [:x :y :z] [z y x]) {:x 1 :y 2 :z 3}) => [3 2 1])
+(fact "When *error-handler* is nil, body of the action is executed even if there are errors."
+  ((action {:error-handler nil} [:pos? x] :body)
+   {:x -1}) => :body)
 
 
-;;================================
-;; Other
-;;================================
-
-(facts "about process-param"
-  (process-param :foo "bar" []) => {:key :foo, :val "bar", :errors []}
-  (process-param :foo "bar" [identity]) => {:key :foo, :val "bar", :errors []}
-
-  (process-param :x 1 [(validator string? (constantly "not a str"))
-                       (converter dec (constantly "dec"))
-                       #(update-in % [:errors] conj "qux")])
-  => {:key :x, :val 0, :errors ["not a str" "qux"]})
+(tabular
+ (fact (transform-params-list (quote ?from)) => (quote ?to))
+ ?from                          ?to
+ [x y]                          {x [] y []}
+ [:a :b x]                      {x [[:a] [:b]]}
+ [:a x y]                       {x [[:a]] y []}
+ [(:a 1) x]                     {x [[:a 1]]}
+ [{:a 1 :b 2} x, {:a 3 :b 4} y] {x [[:a 1] [:b 2]] y [[:a 3] [:b 4]]}
+ [:a {:b 1} (:c 2) x]           {x [[:a] [:b 1] [:c 2]]}
+ [^foo x]                       {x foo})
 
 
-(facts "about process-all-params"
-  (process-all-params {:x 10 :y 20} [[:x] [:y]])
-  => {:x (Param. :x 10 []), :y (Param. :y 20 [])}
-
-  (process-all-params {:x 10 :y 20} [[:x #(update-in % [:errors] conj "foo")]
-                                     [:y #(assoc % :val "bar")]])
-  => {:x (Param. :x 10 ["foo"]), :y (Param. :y "bar" [])})
-
-
-(facts "about validators and converters"
-  (let [app (fn [value & fs] (reduce #(%2 %1) (Param. :x value []) fs))
-        parse-int (converter #(Integer/parseInt %) (constantly "NaN"))
-        check-pos  (validator pos? (constantly "number must be positive") :ensure? true)
-        increment (converter inc (constantly "integer overflow, i think") :ensure? true)]
-
-    (app "1" parse-int) => (Param. :x 1 [])
-    (app "O" parse-int) => (Param. :x "O" ["NaN"])
-
-    (app 1 check-pos) => (Param. :x 1 [])
-    (app 0 check-pos) => (Param. :x 0 ["number must be positive"])
-
-    (app "1" parse-int check-pos) => (Param. :x 1 [])
-    (app "O" parse-int check-pos) => (Param. :x "O" ["NaN"])
-
-    (app "1" parse-int check-pos increment) => (Param. :x 2 [])
-    (app "0" parse-int check-pos increment) => (Param. :x 0 ["number must be positive"])))
+(tabular
+ (fact (process-param 'x ?value ?checkers) => ['x ?new-value ?failed-checkers])
+ ?value  ?checkers                 ?new-value ?failed-checkers
+ "42"    [[:max-length 3] [:int]]  42         []
+ "42"    [[:int] [:inc]]           43         []
+ "foooo" [[:max-length 3]]         "foooo"    [[:max-length 3]]
+ "qwe"   [[:int]]                  "qwe"      [[:int]]
+ "qwer"  [[:int] [:max-length 3]]  "qwer"     [[:int] [:max-length 3]]
+ (against-background
+   (make-param-fn :max-length 3) => (validator #(<= (count %) 3))
+   (make-param-fn :int) => (converter #(Integer/parseInt %))
+   (make-param-fn :inc) => (converter inc)))

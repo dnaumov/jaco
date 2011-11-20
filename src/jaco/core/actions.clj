@@ -18,17 +18,23 @@
         (catch Exception _
           {:passed? false :val %})))
 
+(defn gen-def [f name fn-tail]
+  (letfn [(alter-fn-tail [f [args & body]]
+            `(~(vec (cons (gensym) args)) (~f (do ~@body))))]
+    `(defmethod make-param-fn ~name
+       ~@(if (vector? (first fn-tail))   ; single arity
+           (alter-fn-tail f fn-tail)
+           (map (partial alter-fn-tail f) fn-tail)))))
+
 (defmacro defvalidator
   "TODO: write"
-  [name params body]
-  `(defmethod make-param-fn ~name [_# ~@params]
-     (validator ~body)))
+  [name & fn-tail]
+  (gen-def validator name fn-tail))
 
 (defmacro defconverter
   "TODO: write"
-  [name params body]
-  `(defmethod make-param-fn ~name [_# ~@params]
-     (converter ~body)))
+  [name & fn-tail]
+  (gen-def converter name fn-tail))
 
 
 (defn canonize [checkers]

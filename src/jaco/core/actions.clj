@@ -1,5 +1,11 @@
 (ns jaco.core.actions
-  (:use [jaco.core.routes :only [*request* *error-handler*]]))
+  (:use [jaco.core.routes :only [*request* *error-handler*]]
+        [clojure.string   :only [blank?]])
+  (:import java.text.NumberFormat
+           (java.net URL MalformedURLException)
+           java.util.Hashtable
+           javax.naming.NamingException
+           javax.naming.directory.InitialDirContext))
 
 (def ^{:doc "TODO: write"} ^:dynamic *errors*)
 
@@ -116,16 +122,85 @@
                      (fn [{:keys [~@args]}] ~@body))))
 
 
-(do
-  (defvalidator :max-length [x] #(<= (count %) x))
-  (defvalidator :min-length [x] #(>= (count %) x))
-  (defvalidator :equal [x] #(= % x))
-  (defvalidator :matches? [re] #(boolean (re-matches re %)))
+;;================================
+;; some validators & converters
+;;================================
+;; TODO: move this to a separate ns
 
-  (defvalidator :num? [] number?)
-  (defvalidator :pos? [] pos?)
-  (defconverter :inc [] inc)
-  (defconverter :int [] #(Integer/parseInt %))
-  (defconverter :make-hash [] hash)
-  )
+;;; general
+(defvalidator :present? [] (complement blank?))
+(defvalidator :equal [x] #(= % x))
+(defvalidator :max-length [x] #(<= (count %) x))
+(defvalidator :min-length [x] #(>= (count %) x))
+(defvalidator :length
+  ([x] #(= (count %) x))
+  ([x y] #(<= x (count %) y)))
 
+;;; strings
+(defn matches [re] #(boolean (re-matches re %)))
+(defvalidator :matches [re] (matches re))
+(defvalidator :digits? [] (matches #"\d+"))
+(defvalidator :letters? [] (matches #"\p{javaLetter}+"))
+(defvalidator :alphanumeric? [] (matches #"[A-Za-z0-9]+"))
+
+;;; author: James Reeves (weavejester)
+(defn email-address?
+  "Returns true if the email address is valid, based on RFC 2822. Email
+addresses containing quotation marks or square brackets are considered
+invalid, as this syntax is not commonly supported in practise. The domain of
+the email address is not checked for validity."
+  [email]
+  (let [re (str "(?i)[a-z0-9!#$%&'*+/=?^_`{|}~-]+"
+                "(?:\\.[a-z0-9!#$%&'*+/=?" "^_`{|}~-]+)*"
+                "@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+"
+                "[a-z0-9](?:[a-z0-9-]*[a-z0-9])?")]
+    (boolean (re-matches (re-pattern re) email))))
+
+(defn- dns-lookup [^String hostname ^String type]
+  (let [params {"java.naming.factory.initial"
+                "com.sun.jndi.dns.DnsContextFactory"}]
+    (try
+      (.. (InitialDirContext. (Hashtable. params))
+          (getAttributes hostname (into-array [type]))
+          (get type))
+      (catch NamingException _
+        nil))))
+
+(defn valid-email-domain?
+  "Returns true if the domain of the supplied email address has a MX DNS entry."
+  [email]
+  (and (email-address? email)
+       (if-let [domain (second (re-matches #".*@(.*)" email))]
+         (boolean (dns-lookup domain "MX")))))
+
+(defvalidator :email? [] email-address?)
+(defvalidator :real-email? [] valid-email-domain?)
+(defconverter :url [] #(URL. %))
+(defvalidator :url? [] #(URL. %))
+(defvalidator :link? []
+  #(-> % URL. .getProtocol (.startsWith "http")))
+
+;;; TODO: dates
+
+;;; numbers
+(defvalidator :num? [] number?)
+(defvalidator :pos? [] pos?)
+(defvalidator :neg? [] neg?)
+(defvalidator :even? [] even?)
+(defvalidator :odd? [] odd?)
+(defvalidator :> [x] #(> % x))
+(defvalidator :< [x] #(< % x))
+(defvalidator :>= [x] #(>= % x))
+(defvalidator :<= [x] #(<= % x))
+(defvalidator :between [x y] #(and (>= % x) (<= % y)))
+
+(defconverter :int [] #(Integer/parseInt %))
+(defconverter :long [] #(Long/parseLong %))
+(defconverter :float [] #(Float/parseFloat %))
+(defconverter :double [] #(Double/parseDouble %))
+(defconverter :percent [] #(.parse (NumberFormat/getPercentInstance) %))
+(defconverter :currency [] #(.parse (NumberFormat/getCurrencyInstance) %))
+
+;;; misc
+(defconverter :make-hash [] hash)
+(defconverter :inc [] inc)

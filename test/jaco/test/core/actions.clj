@@ -44,7 +44,7 @@
     ((action [^password x] x) {:x "hacker"}) => (hash "hacker")))
 
 (fact "All of the above options can be used together."
-  (let [a (action [{:min-length 2 :max-length 3} (:matches? #"[0-9]+") :int x] x)]
+  (let [a (action [{:min-length 2 :max-length 3} (:matches #"[0-9]+") :int x] x)]
     (a {:x "12"}) => 12
     (a {:x "foo"}) => :error))
 
@@ -87,8 +87,4 @@
  "42"    [[:int] [:inc]]           43         []
  "foooo" [[:max-length 3]]         "foooo"    [[:max-length 3]]
  "qwe"   [[:int]]                  "qwe"      [[:int]]
- "qwer"  [[:int] [:max-length 3]]  "qwer"     [[:int] [:max-length 3]]
- (against-background
-   (make-param-fn :max-length 3) => (validator #(<= (count %) 3))
-   (make-param-fn :int) => (converter #(Integer/parseInt %))
-   (make-param-fn :inc) => (converter inc)))
+ "qwer"  [[:int] [:max-length 3]]  "qwer"     [[:int] [:max-length 3]])

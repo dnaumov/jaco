@@ -65,12 +65,17 @@
        (into {})))
 
 (defn process-param [sym val checkers] ;=> [sym new-val failed-checkers]
-  (letfn [(f [[val failed-checkers] checker-name+args]
-            (let [checker (apply make-param-fn checker-name+args)
-                  {:keys [passed? val]} (checker val)]
-              [val (if passed?
-                     failed-checkers
-                     (conj failed-checkers checker-name+args))]))]
+  (let [[ensure? checkers] (if (= (first checkers) [:ensure])
+                             [true (next checkers)]
+                             [false checkers])
+        f (fn [[val failed-checkers] checker-name+args]
+            (if (and ensure? (seq failed-checkers))
+              [val failed-checkers]
+              (let [checker (apply make-param-fn checker-name+args)
+                    {:keys [passed? val]} (checker val)]
+                [val (if passed?
+                       failed-checkers
+                       (conj failed-checkers checker-name+args))])))]
     (cons sym (reduce f [val []] checkers))))
 
 (defn- wrap-processing [params body]

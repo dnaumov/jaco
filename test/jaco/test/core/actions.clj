@@ -67,6 +67,16 @@
   ((action {:error-handler nil} [:pos? x] :body)
    {:x -1}) => :body)
 
+(alter-var-root #'*error-handler* (constantly ; return just names of failed checkers
+                                   (fn [errs] (flatten (map last errs)))))
+
+(fact "If you want stop validation process after single fail, put :ensure
+       as the first validator for a param."
+  ((action [:int :pos? x]) {:x "foo"}) => [:int :pos?]
+  ((action [:ensure :int :pos? x]) {:x "foo"}) => [:int]
+  ((action [:ensure :int :pos? x, :ensure :int :neg? y])
+   {:x "foo" :y "bar"}) => [:int :int])
+
 
 (tabular
  (fact (transform-params-list (quote ?from)) => (quote ?to))
